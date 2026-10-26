@@ -176,7 +176,7 @@ if __name__=="__main__":
             })
     with Pool(nworkers) as pool:
         for a,r in pool.imap_unordered(mp_parse_uscrn_subhourly, args):
-            out_path = out_pkl_dir.joinpath(f"{sid}-{y0}-{yf}.pkl")
+            out_path = out_pkl_dir.joinpath(
+                f"{a['sid']}-{a['y0']}-{a['yf']}.pkl")
             pkl.dump(r, out_path.open("wb"))
             print(f"stored {out_path.as_posix()}")
-

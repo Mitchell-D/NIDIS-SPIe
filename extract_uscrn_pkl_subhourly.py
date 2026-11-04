@@ -1,3 +1,8 @@
+"""
+given a csv of sub-hourly USCRN data (perhaps concatenated over years), extract
+data as numpy arrays, combine date and time fields for UTC and local, and
+return a dictionary mapping new variable labels to their numpy arrays.
+"""
 import numpy as np
 import pickle as pkl
 import zarr
@@ -39,7 +44,7 @@ field_parsers = {
     "LATITUDE":("lat", np.float32, lambda v: float_or_nan(v)),
     "AIR_TEMPERATURE":("temp", np.float32, lambda v:float_or_nan(v)),
     "PRECIPITATION":("precip", np.float32, lambda v:float_or_nan(v)),
-    "SOLAR_RADIATION":("swdown", np.float32, lambda v:float_or_nan(v)),
+    "SOLAR_RADIATION":("swdown", np.float32, lambda v:float_or_nan(v, -99999)),
     "SR_FLAG":("flag-swdown", np.uint8, lambda v:np.uint8(v)),
     "SURFACE_TEMPERATURE":("stemp", np.float32, lambda v:float_or_nan(v)),
     "ST_TYPE":("stemp-type", "U1", lambda v:str(v)),

@@ -10,6 +10,10 @@ from multiprocessing import Pool
 from pathlib import Path
 from datetime import datetime,timedelta
 
+char_mapping = {
+    "stemp-type":{"R":1, "C":2, "U":3},
+    }
+
 def float_or_nan(v, mask_val=-9999):
     if v == "":
         return np.nan
@@ -47,7 +51,7 @@ field_parsers = {
     "SOLAR_RADIATION":("swdown", np.float32, lambda v:float_or_nan(v, -99999)),
     "SR_FLAG":("flag-swdown", np.uint8, lambda v:np.uint8(v)),
     "SURFACE_TEMPERATURE":("stemp", np.float32, lambda v:float_or_nan(v)),
-    "ST_TYPE":("stemp-type", "U1", lambda v:str(v)),
+    "ST_TYPE":("stemp-type", "U1", lambda v:char_mapping[str(v)]),
     "ST_FLAG":("flag-stemp", np.uint8, lambda v:np.uint8(v)),
     "RELATIVE_HUMIDITY":("rh", np.float32, lambda v:float_or_nan(v)),
     "RH_FLAG":("flag-rh", np.uint8, lambda v:np.uint8(v)),

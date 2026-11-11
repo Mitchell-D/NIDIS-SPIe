@@ -17,7 +17,6 @@ def get_station_spi(
         zarr_store, station_id, distributions, windows, hist_bins, hist_bounds,
         start_day=None, end_day=None, nan_thresh=0.3,
         ):
-    print()
     zs = zarr.open(zarr_store, path=f"/stations/{station_id}", mode="a")
     dates = zs["date"][...]
     dts = dates.astype(datetime).tolist()
@@ -88,7 +87,7 @@ def get_station_spi(
                 else:
                     pagg.append(xsum)
             pagg = np.array(pagg)
-            print(station_id, wix, dix, pagg.size, np.amin(pagg), np.amax(pagg))
+            #print(station_id,wix,dix,pagg.size,np.amin(pagg),np.amax(pagg))
             tmp_params,tmp_err,(hx,hy) = fit_and_check_dists(
                 x=pagg,
                 distributions=distributions,
@@ -106,7 +105,6 @@ def get_station_spi(
                 for p in tmp_params
                 ])
             tmp_err = np.array(tmp_err).T
-            #print(x.size, [[float(v) for v in p] for p in params])
             params[:, wix, dix, :] = np.asarray(tmp_params)
             err[:, wix, dix, :] = np.asarray(tmp_err)
 
@@ -145,7 +143,7 @@ if __name__=="__main__":
 
     agg_windows = [30, 45, 60, 90]
     ## fraction of nan values allowed per day over which precip sum is ignored
-    daily_nan_thresh = .3
+    daily_nan_thresh = .2
     hist_bins = 128
     hist_bounds = (0, 1024)
 

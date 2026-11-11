@@ -76,28 +76,30 @@ if __name__=="__main__":
     start_year = 2006
     end_year = 2026
     get_stations = [
-        "AL_Russellville_4_SSE",
-        "AL_Fairhope_3_NE",
-        "AL_Cullman_3_ENE",
-        "AL_Troy_2_W",
-        "AL_Talladega_10_NNE",
-        "AL_Selma_6_SSE",
-        "AL_Scottsboro_2_NE",
-        "AL_Thomasville_2_S",
-        "AL_Highland_Home_2_S",
-        "AL_Gainesville_2_NE",
-        "AL_Selma_13_WNW",
-        "AL_Valley_Head_1_SSW",
-        "AL_Greensboro_2_WNW",
-        "AL_Northport_2_S",
-        "AL_Courtland_2_WSW",
-        "AL_Gadsden_19_N",
-        "AL_Brewton_3_NNE",
-        "AL_Muscle_Shoals_2_N",
-        "AL_Clanton_2_NE",
+        #"AL_Russellville_4_SSE",
+        #"AL_Fairhope_3_NE",
+        #"AL_Cullman_3_ENE",
+        #"AL_Troy_2_W",
+        #"AL_Talladega_10_NNE",
+        #"AL_Selma_6_SSE",
+        #"AL_Scottsboro_2_NE",
+        #"AL_Thomasville_2_S",
+        #"AL_Highland_Home_2_S",
+        #"AL_Gainesville_2_NE",
+        #"AL_Selma_13_WNW",
+        #"AL_Valley_Head_1_SSW",
+        #"AL_Greensboro_2_WNW",
+        #"AL_Northport_2_S",
+        #"AL_Courtland_2_WSW",
+        #"AL_Gadsden_19_N",
+        #"AL_Brewton_3_NNE",
+        #"AL_Muscle_Shoals_2_N",
+        #"AL_Clanton_2_NE",
+        "GA_Newton_8_W",
+        "GA_Newton_11_SW",
         ]
 
-    download = False
+    download = True
     concatenate = True
 
     if download:

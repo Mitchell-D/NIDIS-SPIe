@@ -1,23 +1,68 @@
 import numpy as np
 import scipy.stats as spstats
 
-def fit_and_check_dists(x:np.array, distributions:list, hist_bins:int,
-        return_hist=False, scipy_fit_kwargs={}):
-    """ """
-    hy,hx = np.histogram(x, bins=hist_bins, density=True)
+def calc_anderson_darling(x, dist, params):
+    """
+    """
+    x = np.sort(np.asarray(x))
+    n = len(x)
+
+    ## theoretical cumulative probabilities
+    cdf = dist.cdf(x, *params)
+
+    ## Avoid log(0) and log(1)
+    eps = np.finfo(float).eps
+    cdf = np.clip(cdf, eps, 1 - eps)
+
+    ## Anderson-Darling stats
+    i = np.arange(1, n + 1)
+    return -n - np.sum(
+        (2 * i - 1) *
+        (np.log(cdf) + np.log(1 - cdf[::-1]))
+        ) / n
+
+def calc_sse(dist, params, hist_x, hist_y):
+    """
+    """
+    pdf = dist.pdf(hist_x, *params)
+    return np.sum((hist_y - pdf)**2) ## sum of squared errors
+
+def calc_aic(x, dist, params, num_params):
+    """
+    """
+    return 2 * num_params - 2 * np.sum(dist.logpdf(x, *params))
+
+def fit_and_check_dists(
+        x:np.array, distributions:list,
+        hist_bins:int, hist_bounds:tuple, nparams:int,
+        return_hist=False, scipy_fit_kwargs={}
+        ):
+    """
+    Fit multiple distributions to the input data and return a list of
+    parameters and error metrics ordered like:
+    (sse, anderson-darling, akaike information criterion)
+    for each distribution in order. Optionally also returns histogram used
+    to calculate SSE
+    """
+    hy,hx = np.histogram(x, bins=hist_bins, range=hist_bounds, density=True)
     xcent = (hx[:-1]+hx[1:]) / 2
     all_sse = []
+    err = [
+        [], ## sse
+        [], ## ad
+        [], ## aic
+        ]
     all_params = []
     for dk in distributions:
         dist = getattr(spstats, dk)
         params = dist.fit(x, **scipy_fit_kwargs)
-        pdf = dist.pdf(xcent, *params)
-        sse = np.sum((hy - pdf)**2) ## sum of squared errors
-        all_sse.append(sse)
+        err[0].append(calc_sse(dist, params, xcent, hy))
+        err[1].append(calc_anderson_darling(x, dist, params))
+        err[2].append(calc_aic(x, dist, params, nparams))
         all_params.append(params)
     if return_hist:
-        return all_params,all_sse,(xcent,hy)
-    return all_params,all_sse
+        return all_params,err,(xcent,hy)
+    return all_params,err
 
 def generate_daily(times, data):
     dates = times.astype("datetime64[D]")
@@ -103,3 +148,68 @@ def doy_window_masks(times, window_days):
             mask = (doy >= window_start) | (doy <= day)
 
         yield mask
+
+def doy_window_slices(times, window_days):
+    """
+    Wrapper around `doy_window_masks` that yields a list of slice objects for
+    each contiguous sequence of True values in the day-of-year window masks.
+
+    Slices that overlap the beginning or end of `times` and do not fully span
+    a `window_days` period are omitted.
+
+    Parameters
+    ----------
+    times : array_like, shape (N,)
+        One-dimensional datetime64 array with arbitrary time resolution.
+    window_days : int
+        Number of days in each trailing day-of-year window.
+
+    Yields
+    ------
+    slices : list of slice
+        List of slice objects corresponding to full trailing window sequences.
+    """
+    times = np.asarray(times)
+    n_total = len(times)
+
+    # Compute DoY for each timestamp once to evaluate slice span completeness
+    year = times.astype("datetime64[Y]")
+    reference_dates = (
+        np.datetime64("2000-01-01")
+        + (times - year).astype("timedelta64[D]")
+    )
+    reference_year = reference_dates.astype("datetime64[Y]")
+    doy = (
+        reference_dates.astype("datetime64[D]")
+        - reference_year.astype("datetime64[D]")
+    ).astype(int)
+
+    for mask in doy_window_masks(times, window_days):
+        if not np.any(mask):
+            yield []
+            continue
+
+        # Find contiguous sequences of True values by detecting transitions
+        padded = np.empty(n_total + 2, dtype=bool)
+        padded[0] = False
+        padded[1:-1] = mask
+        padded[-1] = False
+
+        diff = np.diff(padded.view(np.int8))
+        starts = np.flatnonzero(diff == 1)
+        stops = np.flatnonzero(diff == -1)
+
+        valid_slices = []
+        for st, sp in zip(starts, stops):
+            # Check if slice is cut off by the dataset boundaries
+            touches_boundary = (st == 0) or (sp == n_total)
+
+            if touches_boundary:
+                # Count unique calendar days of year in the truncated slice
+                unique_days = len(np.unique(doy[st:sp]))
+                if unique_days < window_days:
+                    continue  # Omit incomplete window slice
+
+            valid_slices.append(slice(st, sp))
+
+        yield valid_slices

@@ -42,3 +42,26 @@ Given a per-station pkl from `extract_uscrn_pkl_subhourly.py`, snap
 data to a regular hourly grid, and calculate the minimum, maximum,
 average, standard deviation, and number of valid observations per
 hour.
+
+## check\_ghcnd\_inventory.py
+
+Given a GHCN daily inventory text file from [this link][1], find
+stations within a degree distance threshold of USCRN stations with
+coordinates specified in a zarr file, and download their PoR csv
+files. Save a mapping from crn stations to the closest ghcn stations
+alongside the ghcn periods of record and distances.
+
+## parse\_ghcn\_daily\_to\_zarr.py
+
+Extract GHCNd station period-of-record files to a zarr file with
+groups for each station.
+
+## calc\_spi\_dists.py
+
+Fit distributions with multiple window values to ghcn stations,
+and calculate sum of squared errors, anderson-darling fit, and Akaike
+information criterion. Save the distribution parameters, error
+statistics, histograms, and information on zero-precip periods to
+each station's zarr group.
+
+[1]:https://www.ncei.noaa.gov/pub/data/ghcn/daily/ghcnd-inventory.txt

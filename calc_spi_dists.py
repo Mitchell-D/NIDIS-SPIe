@@ -71,7 +71,7 @@ def get_station_spi(
     params = np.empty((len(distributions), len(windows), 366, 3))
     ## final axis is (num samples, num zero precip samples)
     samples = np.empty((len(windows), 366, 2), dtype=np.uint16)
-    hist_y = np.empty((len(windows), 366, hist_bins), dtype=np.uint16)
+    hist_y = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
     hist_x = None
     for wix,wsize in enumerate(windows):
         for dix,slcs in enumerate(doy_window_slices(dates, wsize)):
@@ -99,6 +99,7 @@ def get_station_spi(
                 )
             if hist_x is None:
                 hist_x = hx
+            #print(np.unique(hy))
             hist_y[wix, dix] = hy
             tmp_params = np.array([
                 p if len(p)==3 else [*p, np.nan]
@@ -137,14 +138,14 @@ if __name__=="__main__":
     get_stations = None
 
     get_dists = [
-        "gamma", "gumbel_l", "fisk", "lognorm",
+        "gamma", "gumbel_r", "fisk", "lognorm",
         "logistic", "norm", "weibull_min",
         ]
 
     agg_windows = [30, 45, 60, 90]
     ## fraction of nan values allowed per day over which precip sum is ignored
     daily_nan_thresh = .2
-    hist_bins = 128
+    hist_bins = 32
     hist_bounds = (0, 1024)
 
     #start_time = datetime(2014, 1, 1, 0)
@@ -152,7 +153,7 @@ if __name__=="__main__":
     start_time = None
     end_time = None
 
-    nworkers = 4
+    nworkers = 6
 
     """ ------------( end normal configuration )------------ """
 

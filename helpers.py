@@ -3,7 +3,28 @@ import scipy.stats as spstats
 
 def calc_anderson_darling(x, dist, params):
     """
+    calculate the anderson-darling fit for a distribution
+
+    :@param x: observed samples
+    :@param dist: scipy distribution object
+    :@param params: distributional parameters
     """
+    x_sorted = np.sort(np.asarray(x))
+    n = len(x_sorted)
+    i = np.arange(1, n + 1)
+
+    ## logcdf(x) is log(CDF), logsf(x) is log(1 - CDF)
+    logcdf = dist.logcdf(x_sorted, *params)
+    logsf = dist.logsf(x_sorted, *params)
+
+    ## check for invalid values caused by values outside supported bounds
+    if np.any(np.isnan(logcdf)) or np.any(np.isnan(logsf)):
+        return np.nan
+
+    ad_stat = -n - np.sum((2 * i - 1) * (logcdf + logsf[::-1])) / n
+    return float(ad_stat)
+
+    '''
     x = np.sort(np.asarray(x))
     n = len(x)
 
@@ -20,15 +41,34 @@ def calc_anderson_darling(x, dist, params):
         (2 * i - 1) *
         (np.log(cdf) + np.log(1 - cdf[::-1]))
         ) / n
+    '''
 
-def calc_sse(dist, params, hist_x, hist_y):
+def calc_sse(dist, params, bin_edges, hist_y):
     """
+    calculate sum of squared errors for the distribution given a data histogram
+
+    :@param dist: scipy distribution object
+    :@param params: distributional parameters
+    :@param hist_x: bin center values for the histogram
+    :@param hist_y: probability density for each bin based on observations
     """
-    pdf = dist.pdf(hist_x, *params)
-    return np.sum((hist_y - pdf)**2) ## sum of squared errors
+    #pdf = dist.pdf(hist_x, *params)
+    #return np.sum((hist_y - pdf)**2) ## sum of squared errors
+    ## integrated bin probabilities / bin widths yields exact mean density
+    bin_widths = np.diff(bin_edges)
+    expected_prob = dist.cdf(bin_edges[1:], *params) \
+            - dist.cdf(bin_edges[:-1], *params)
+    expected_density = expected_prob / bin_widths
+    return float(np.sum((hist_y - expected_density) ** 2))
 
 def calc_aic(x, dist, params, num_params):
     """
+    calculate the akaike information criterion for a distribution
+
+    :@param x: observed samples
+    :@param dist: scipy distribution object
+    :@param params: distributional parameters
+    :@param num_params: number of free parameters fitted
     """
     return 2 * num_params - 2 * np.sum(dist.logpdf(x, *params))
 
@@ -45,6 +85,9 @@ def fit_and_check_dists(
     to calculate SSE
     """
     hy,hx = np.histogram(x, bins=hist_bins, range=hist_bounds, density=True)
+    print(np.round(np.amax(x)))
+    #print(np.unique(hx))
+    #print(np.unique(hy))
     xcent = (hx[:-1]+hx[1:]) / 2
     all_sse = []
     err = [
@@ -56,7 +99,8 @@ def fit_and_check_dists(
     for dk in distributions:
         dist = getattr(spstats, dk)
         params = dist.fit(x, **scipy_fit_kwargs)
-        err[0].append(calc_sse(dist, params, xcent, hy))
+        #err[0].append(calc_sse(dist, params, xcent, hy))
+        err[0].append(calc_sse(dist, params, hx, hy))
         err[1].append(calc_anderson_darling(x, dist, params))
         err[2].append(calc_aic(x, dist, params, nparams))
         all_params.append(params)

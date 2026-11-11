@@ -37,6 +37,8 @@ if __name__=="__main__":
         "AL_Gadsden_19_N",
         "AL_Selma_13_WNW",
         "AL_Fairhope_3_NE",
+        "GA_Newton_11_SW",
+        "GA_Newton_8_W",
         ]
     check_closest = True
     download = True

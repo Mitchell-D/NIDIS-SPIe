@@ -13,9 +13,12 @@ if __name__=="__main__":
     zarr_store = Path("data/zarr/ghcnd.zarr")
     fig_dir = Path("figures/spi-err")
 
-    sid = "USC00016161"
-    window = 90
-    doy_ix = 5
+    #precip_type = "spi"
+    precip_type = "jng"
+    #sid = "USC00016161"
+    sid = "USC00091500"
+    window = 60
+    doy_ix = 150
 
     zs = zarr.open(zarr_store, mode="r", path=f"/stations/{sid}")
     l_dist = zs.attrs["labels"]["dist"]
@@ -23,11 +26,11 @@ if __name__=="__main__":
     l_err = zs.attrs["labels"]["err"]
 
     wix = l_window.index(window)
-    hist_x = zs["spi-hist-x"][...]
-    hist_y = zs["spi-hist-y"][wix, doy_ix]
+    hist_x = zs[f"{precip_type}-hist-x"][...]
+    hist_y = zs[f"{precip_type}-hist-y"][wix, doy_ix]
     dparams = dict(zip(l_dist, [
         [pv for pv in dparams if not np.isnan(pv)]
-        for dparams in zs["spi-params"][:, wix, doy_ix].tolist()
+        for dparams in zs[f"{precip_type}-params"][:, wix, doy_ix].tolist()
         ]))
     pprint(dparams)
 

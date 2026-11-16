@@ -1,5 +1,8 @@
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
+from pathlib import Path
 import scipy.stats as spstats
+from datetime import datetime,timedelta
 
 def calc_anderson_darling(x, dist, params):
     """
@@ -85,7 +88,7 @@ def fit_and_check_dists(
     to calculate SSE
     """
     hy,hx = np.histogram(x, bins=hist_bins, range=hist_bounds, density=True)
-    print(np.round(np.amax(x)))
+    #print(np.round(np.amax(x)))
     #print(np.unique(hx))
     #print(np.unique(hy))
     xcent = (hx[:-1]+hx[1:]) / 2
@@ -257,3 +260,90 @@ def doy_window_slices(times, window_days):
             valid_slices.append(slice(st, sp))
 
         yield valid_slices
+
+def _effect(p):
+    """
+    Calculates effective precipitation and runoff using modified curve number.
+    Input: p (1D numpy array of length 6)
+    Output: Tuple of (effective_precipitation, runoff)
+    """
+    # If any data in the 6-day window is missing, return NaNs
+    if np.isnan(p).any():
+        return np.nan#, np.nan
+
+    psum = np.sum(p[:-1]) # Previous 5 days
+    pob = p[-1]           # Current day
+
+    if pob == 0.0:
+        return 0.0#, 0.0
+
+    # Curve number selection
+    if psum < 1.0:
+        cn = 55
+    elif psum > 1.6:
+        cn = 88
+    else:
+        cn = 74
+
+    s = -1.0 + 100.0 / cn
+
+    # Initial precipitation loss (Io)
+    # p[-2:-5:-1] steps backwards through the 3 preceding days:
+    # p[-2], p[-3], p[-4]
+    Io = 0.0
+    for val in p[-2:-5:-1]:
+        if val <= 0.05:
+            Io += 0.05
+        else:
+            break
+
+    a = max(pob - Io, 0.0)
+    Ia = 0.2 * s
+
+    if pob <= Ia:
+        return float(a)#, 0.0
+
+    q = ((pob - Ia) ** 2) / (pob - Ia + s)
+    fi = a - q
+
+    return float(fi)
+
+def effect(precip):
+    ep = [_effect(w) for w in sliding_window_view(precip, 6)]
+    return np.concatenate([np.full(5, np.nan), np.asarray(ep)])
+
+def parse_usdm_csv(csv_path:Path):
+    meta = None
+    lines = csv_path.open("r").readlines()
+    head = lines.pop(0).split(",")
+    meta_fields = ["FIPS", "County", "State"]
+    cover_fields = ["D0", "D1", "D2", "D3", "D4"]
+    time_fields = ["ValidStart", "ValidEnd"]
+    cover_ixs = [head.index(cf) for cf in cover_fields]
+    time_ixs = [head.index(tf) for tf in time_fields]
+    coverage = [[] for cf in cover_fields]
+    time = {tf:[] for tf in time_fields}
+    for l in lines:
+        v = l.split(",")
+        if meta is None:
+            meta = {l[head.index(mk)] for mk in meta_fields}
+        for tf,tix in zip(time_fields, time_ixs):
+            time[tf].append(datetime.strptime(v[tix], "%Y-%m-%d"))
+        for cf,cix in zip(cover_fields, cover_ixs):
+            coverage[cover_fields.index(cf)].append(float(v[cix]))
+
+    start_date = min(time["ValidStart"])
+    end_date = max(time["ValidEnd"])
+
+    all_dates = [
+        start_date + timedelta(days=d)
+        for d in range(int((end_date-start_date).days)+1)
+        ]
+    daily_cover = np.full((len(all_dates), 5), np.nan)
+    coverage = np.asarray(coverage).T
+
+    for i,(vs,ve) in enumerate(zip(time["ValidStart"], time["ValidEnd"])):
+        slc = slice(all_dates.index(vs), all_dates.index(ve) + 1)
+        daily_cover[slc] = coverage[i][None]
+    return meta,all_dates,cover_fields,daily_cover
+

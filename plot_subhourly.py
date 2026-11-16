@@ -14,15 +14,17 @@ if __name__=="__main__":
     plot_variable = "precip"
     plot_metrics = ["mean", "min", "max"]
     plot_stations = [
-        "AL_Gadsden_19_N",
-        "AL_Selma_13_WNW",
+        #"AL_Gadsden_19_N",
+        #"AL_Selma_13_WNW",
         "AL_Fairhope_3_NE",
+        "GA_Newton_8_W",
+        "GA_Newton_11_SW",
         ]
 
-    #start_time = datetime(2014, 1, 1, 0)
-    #end_time = datetime(2014, 1, 31, 23)
-    start_time = None
-    end_time = None
+    start_time = datetime(2014, 1, 1, 0)
+    end_time = datetime(2014, 12, 31, 23)
+    #start_time = None
+    #end_time = None
 
     """ ------------( end normal configuration )------------ """
 

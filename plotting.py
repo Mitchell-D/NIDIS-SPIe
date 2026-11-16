@@ -5,6 +5,13 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 
+import numpy as np
+import matplotlib
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from pathlib import Path
+from datetime import datetime
+
 def plot_lines(domain:list, ylines:list, fig_path:Path=None,
                labels:list=[], multi_domain=False, plot_spec={},
                show:bool=False):
@@ -23,6 +30,8 @@ def plot_lines(domain:list, ylines:list, fig_path:Path=None,
             corresponding to each of the ylines
     :@param plot_spec: Dictionary of plot options see the geo_plot module
             for plot_spec options, but the defaults are safe.
+            Can include 'shaded_intervals': a list of dictionaries with keys
+            'start', 'end', 'label' (optional), 'color' (optional), and 'alpha'
     :@param show: if True, shows the image in the matplotlib Agg client.
     """
     plt.clf()
@@ -61,11 +70,48 @@ def plot_lines(domain:list, ylines:list, fig_path:Path=None,
             cur_domain = domain[i]
         else:
             cur_domain = domain
-        ax.plot(cur_domain, ylines[i],
-                label=labels[i] if len(labels) else "",
-                linewidth=ps.get("line_width"),
-                linestyle=None if not linestyle else linestyle[i],
-                color=None if not colors else colors[i])
+        ax.plot(
+            cur_domain,
+            ylines[i],
+            label=labels[i] if len(labels) else "",
+            linewidth=ps.get("line_width"),
+            linestyle=None if not linestyle else linestyle[i],
+            color=None if not colors else colors[i]
+            )
+
+    shaded_intervals = ps.get("shaded_intervals")
+    if shaded_intervals:
+        for interval in shaded_intervals:
+            start = interval.get("start")
+            end = interval.get("end")
+            if start is None or end is None:
+                continue
+
+            color = interval.get("color", "gray")
+            alpha = interval.get("alpha", 0.3)
+            label = interval.get("label")
+
+            ## shade the full vertical extent
+            ax.axvspan(start, end, facecolor=color, alpha=alpha)
+
+            # Add text label centered near the top
+            if label:
+                ## calculate midpoint
+                try:
+                    mid_x = start + (end - start) / 2
+                except TypeError:
+                    mid_x = start # Fallback safety
+
+                ## transform uses data coordinates for x, and axes coordinates
+                ## (0 to 1) for y
+                ax.text(mid_x, 0.98, label,
+                    transform=ax.get_xaxis_transform(),
+                    horizontalalignment='center',
+                    verticalalignment='top',
+                    color=interval.get("label_color", "black"),
+                    fontsize=interval.get(
+                        "label_size", ps.get("label_size", 10)),
+                    )
 
     ax.set_xlabel(ps.get("xlabel"),
             fontsize=ps.get("label_size"))
@@ -115,7 +161,6 @@ def plot_lines(domain:list, ylines:list, fig_path:Path=None,
     plt.close()
     return
 
-
 def plot_lines_multiy(domain, ylines, plot_spec={},
         show=False, fig_path=None):
     """
@@ -124,10 +169,14 @@ def plot_lines_multiy(domain, ylines, plot_spec={},
 
     :@param ylines: list of lists such that the first level contains a sub-list
         for each group of lines that share a domain
+    :@param plot_spec: Dictionary of plot options. Can include
+        'shaded_intervals': a list of dictionaries with keys 'start', 'end',
+        'label' (optional), 'color' (optional), 'alpha' (optional),
+        'label_color' (optional), and 'label_size' (optional).
     """
     ps = {"fig_size":None, "dpi":200, "spine_increment":.1,
           "date_format":"%Y-%m-%d", "xtick_rotation":30, "ytick_rotation":45,
-          "ylabel_position":"top", "ylabel_pad":.2,}
+          "ylabel_position":"center", "ylabel_pad":.2,}
     ps.update(plot_spec)
     if len(domain) != len(ylines[0][0]):
         raise ValueError(
@@ -158,10 +207,15 @@ def plot_lines_multiy(domain, ylines, plot_spec={},
     for i in range(1, len(ylines)):
         ax = host.twinx()
         #ax.spines["left"] = ax.spines["right"]
-        ax.yaxis.set_label_position("left")
-        ax.yaxis.set_ticks_position("left")
-        ax.spines["left"].set_position(
-                ("axes", -1*ps.get("spine_increment") * i))
+        if len(ylines) > 2:
+            ax.yaxis.set_label_position("left")
+            ax.yaxis.set_ticks_position("left")
+            ax.spines["left"].set_position(
+                ("axes", -1*ps.get("spine_increment") * i)
+                )
+        else:
+            ax.yaxis.set_label_position("right")
+            ax.yaxis.set_ticks_position("right")
         ax.set_yscale(y_scales[i])
         #ax.spines["right"].set_visible(False)
         axes.append(ax)
@@ -176,14 +230,53 @@ def plot_lines_multiy(domain, ylines, plot_spec={},
                 linestyle=line_style[lc]))
             lc += 1
         ax.set_ylabel(
-                y_labels[i], color=colors[lc-1],
-                fontsize=ps.get("label_fontsize"),
-                loc=ps.get("ylabel_position"))
+            y_labels[i],
+            color=colors[lc-1],
+            fontsize=ps.get("label_fontsize"),
+            loc=ps.get("ylabel_position"),
+            )
         ax.tick_params(axis="y", colors=colors[lc-1],)
         ax.tick_params(axis="y", rotation=ps.get("ytick_rotation"))
         if y_ranges[i] is not None:
             ax.set_ylim(y_ranges[i])
 
+    shaded_intervals = ps.get("shaded_intervals")
+    if shaded_intervals:
+        for interval in shaded_intervals:
+            start = interval.get("start")
+            end = interval.get("end")
+            if start is None or end is None:
+                continue
+
+            color = interval.get("color", "gray")
+            alpha = interval.get("alpha", 0.3)
+            label = interval.get("label")
+
+            ## shade the full vertical extent on the host axis
+            host.axvspan(start, end, facecolor=color, alpha=alpha)
+
+            ## add text label centered near the top
+            if label:
+                ## calculate midpoint
+                try:
+                    mid_x = start + (end - start) / 2
+                except TypeError:
+                    mid_x = start # Fallback safety
+
+                ## transform uses data coordinates for x, and axes
+                ## coordinates (0 to 1) for y
+                host.text(
+                    mid_x,
+                    0.98,
+                    label,
+                    transform=host.get_xaxis_transform(),
+                    horizontalalignment='center',
+                    verticalalignment='top',
+                    color=interval.get("label_color", "black"),
+                    fontsize=interval.get(
+                        "label_size", ps.get("label_fontsize", 10)
+                        )
+                    )
 
     host.grid(ps.get("grid", False), **ps.get("grid_kwargs", {}))
     host.set_xlabel(ps.get("xlabel", ""),
@@ -200,6 +293,8 @@ def plot_lines_multiy(domain, ylines, plot_spec={},
             labels=line_labels,
             ncol=ps.get("legend_ncols", 1),
             fontsize=ps.get("legend_fontsize"),
+            loc=ps.get("legend_loc", "best"),
+
             )
     if plot_spec.get("time_locator"):
         host.xaxis.set_major_locator({
@@ -214,8 +309,8 @@ def plot_lines_multiy(domain, ylines, plot_spec={},
         plt.setp(host.get_xticklabels(),
                 horizontalalignment=plot_spec.get("xtick_align"))
 
-    if ps.get("zero_axis"):
-        host.axhline(0, color="black")
+    if ps.get("hline_kwargs"):
+        host.axhline(**ps.get("hline_kwargs"))
 
     plt.title(ps.get("title", ""),
             fontdict={"fontsize":ps.get("title_fontsize")})
@@ -509,3 +604,38 @@ def plot_bars_with_lines(
         plt.show()
 
     return fig, ax
+
+def plot_scatter(x, y, size=None, color=None, plot_spec={},
+        fig_path=None, show=False):
+    """
+    basic scatterplot using my plot_spec standard
+    """
+    ps = {"xlabel":"", "ylabel":"", "marker_size":4, "dpi":200, "cmap":"jet",
+            "text_size":12, "title":"", "norm":"linear", "marker":"o",
+            "cbar_shrink":1., "linewidths":2, "title_fontsize":14,
+            "legend_fontsize":14, "tick_fontsize":10, "legend_ncols":1}
+    ps.update(plot_spec)
+    plt.rcParams.update({"font.size":ps["text_size"]})
+
+    fig, ax = plt.subplots(figsize=ps.get("fig_size"))
+    ax.scatter(
+            x=x, y=y, s=size, c=color,
+            marker=ps.get("marker"),
+            cmap=ps.get("cmap"),
+            vmin=ps.get("vmin"),
+            norm=ps.get("norm"),
+            vmax=ps.get("vmax"),
+            linewidths=ps.get("linewidths"), ## marker edges
+            )
+    ax.set_xlabel(ps.get("xlabel"), fontsize=ps.get("label_fontsize"))
+    ax.set_ylabel(ps.get("ylabel"), fontsize=ps.get("label_fontsize"))
+    ax.set_title(ps.get("title"), fontsize=ps.get("title_fontsize"))
+    #ax.legend(ncol=ps.get("legend_ncols"), fontsize=ps.get("legend_fontsize"))
+    ax.tick_params(axis='both',which='major',labelsize=ps.get("tick_fontsize"))
+    ax.tick_params(axis='both',which='minor',labelsize=ps.get("tick_fontsize"))
+
+    if show:
+        plt.show()
+    if fig_path:
+        fig.savefig(fig_path.as_posix(),bbox_inches="tight",dpi=ps.get("dpi"))
+    plt.close()

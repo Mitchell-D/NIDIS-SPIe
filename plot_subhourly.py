@@ -11,7 +11,7 @@ if __name__=="__main__":
     #zarr_store = Path("data/zarr/crn_hourly_por.zarr")
     fig_dir = Path("figures/subhourly")
 
-    plot_variable = "precip"
+    plot_variable = "sm-2in"
     plot_metrics = ["mean", "min", "max"]
     plot_stations = [
         #"AL_Gadsden_19_N",
@@ -21,10 +21,10 @@ if __name__=="__main__":
         "GA_Newton_11_SW",
         ]
 
-    start_time = datetime(2014, 1, 1, 0)
-    end_time = datetime(2014, 12, 31, 23)
-    #start_time = None
-    #end_time = None
+    #start_time = datetime(2014, 1, 1, 0)
+    #end_time = datetime(2014, 12, 31, 23)
+    start_time = None
+    end_time = None
 
     """ ------------( end normal configuration )------------ """
 

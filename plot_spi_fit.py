@@ -36,6 +36,12 @@ if __name__=="__main__":
             ghcn_stations += [v["ghcn_id"] for v in cgsm[crn_key]]
     ghcn_stations = list(set(ghcn_stations))
 
+    tmp_station = list(zgrp["stations"].keys())[0]
+    l_dist = zgrp[f"/stations/{tmp_station}/"].attrs["labels"]["dist"]
+    l_window = zgrp[f"/stations/{tmp_station}/"].attrs["labels"]["window"]
+    l_err = zgrp[f"/stations/{tmp_station}/"].attrs["labels"]["err"]
+
+    '''
     for sid in zgrp["stations"].keys():
         if sid not in ghcn_stations:
             continue
@@ -152,10 +158,12 @@ if __name__=="__main__":
                         "cmap":"rainbow",
                         },
                     )
+    '''
 
     ## plot SPI error generalized over stations
     derr = np.concatenate([
         zgrp[f"/stations/{sid}/spi-err"][...]
+        for sid in zgrp["stations"].keys()
         ], axis=2)
 
     for eix,ek in enumerate(l_err):
@@ -191,6 +199,7 @@ if __name__=="__main__":
     ## plot JNG SPIe generalized over stations
     derr = np.concatenate([
         zgrp[f"/stations/{sid}/jng-err"][...]
+        for sid in zgrp["stations"].keys()
         ], axis=2)
 
     for eix,ek in enumerate(l_err):
@@ -219,6 +228,42 @@ if __name__=="__main__":
                 },
             #show=True,
             fig_path=fig_dir.joinpath(f"jng_err-bars_{ek}_all-stations.png"),
+            group_order=list(sorted(l_window)),
+            bar_order=list(sorted(l_dist)),
+            )
+
+    ## plot WSPI generalized over stations
+    derr = np.concatenate([
+        zgrp[f"/stations/{sid}/wspi-err"][...]
+        for sid in zgrp["stations"].keys()
+        ], axis=2)
+
+    for eix,ek in enumerate(l_err):
+        ev = derr[...,eix]
+        eavg = np.average(ev, axis=2)
+        edata = {}
+        for wix,wk in enumerate(l_window):
+            edata[wk] = {}
+            for dix,dk in enumerate(l_dist):
+                eavg = np.average(ev[dix,wix])
+                p10,p90 = np.percentile(ev[dix,wix], [10, 90])
+                edata[wk][dk] = (eavg, eavg-p10, p90-eavg)
+        plot_nested_bars(
+            data_dict=edata,
+            labels={},
+            plot_error_bars=True,
+            bar_colors=None,
+            plot_spec={
+                "title":f"Weighted SPI GHCNd {long_labels_err[ek]}",
+                "cmap":"rainbow",
+                "ylabel":long_labels_err[ek],
+                "xlabel":"Window size",
+                "figsize":(16,12),
+                "yscale":"log" if ek=="ad" else "linear",
+                "legend_ncols":2,
+                },
+            #show=True,
+            fig_path=fig_dir.joinpath(f"wspi_err-bars_{ek}_all-stations.png"),
             group_order=list(sorted(l_window)),
             bar_order=list(sorted(l_dist)),
             )

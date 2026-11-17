@@ -121,6 +121,7 @@ def generate_daily(times, data):
     for start, end in zip(boundaries[:-1], boundaries[1:]):
         yield (dates[start], data[start:end])
 
+'''
 def doy_window_masks(times, window_days):
     """
     generate boolean masks for trailing day-of-year windows.
@@ -195,6 +196,60 @@ def doy_window_masks(times, window_days):
             mask = (doy >= window_start) | (doy <= day)
 
         yield mask
+'''
+
+def doy_window_masks(times, window_days):
+    """
+    Yield a boolean mask for each day of the year (1..366 inclusive).
+
+    For each day of the year, values in `times` (sorted ascending) falling
+    within `[target_date - window_days, target_date]` for any year are set to
+    True.  On non-leap years, day 366 defaults to day 365 (December 31).
+    """
+    if window_days <= 0:
+        raise ValueError("window_days must be positive")
+
+    times = np.asarray(times)
+    if not np.issubdtype(times.dtype, np.datetime64):
+        raise TypeError("times must be a numpy datetime64 array")
+
+    if times.size == 0:
+        for _ in range(1, 367):
+            yield np.zeros(times.shape, dtype=bool)
+        return
+
+    ## day precision so sub-day timestamps on target_date are included
+    dates = times.astype("datetime64[D]")
+
+    # Include years up to (last_date+window_days) so year-end dates still match
+    # early-January windows of the following year
+    min_year = int(dates[0].astype("datetime64[Y]").astype(int)) + 1970
+    max_end = dates[-1] + np.timedelta64(window_days, "D")
+    max_year = int(max_end.astype("datetime64[Y]").astype(int)) + 1970
+
+    years = np.arange(min_year, max_year + 1)
+    is_leap = (years % 4 == 0) & ((years % 100 != 0) | (years % 400 == 0))
+    year_starts = (years-1970).astype("datetime64[Y]").astype("datetime64[D]")
+    win_delta = np.timedelta64(window_days-1, "D")
+
+    for doy in range(1, 367):
+        if doy == 366:
+            offsets = np.where(is_leap, 365, 364).astype("timedelta64[D]")
+        else:
+            offsets = np.timedelta64(doy - 1, "D")
+
+        end_dates = year_starts + offsets
+        start_dates = end_dates - win_delta
+
+        lefts = np.searchsorted(dates, start_dates, side="left")
+        rights = np.searchsorted(dates, end_dates, side="right")
+
+        mask = np.zeros(dates.shape, dtype=bool)
+        for left, right in zip(lefts, rights):
+            if left < right:
+                mask[left:right] = True
+
+        yield mask
 
 def doy_window_slices(times, window_days):
     """
@@ -264,32 +319,38 @@ def doy_window_slices(times, window_days):
 def _effect(p):
     """
     Calculates effective precipitation and runoff using modified curve number.
-    Input: p (1D numpy array of length 6)
-    Output: Tuple of (effective_precipitation, runoff)
+    :@param p: 1d size 6 array of precipitation values in inches
+    :@return: effective precip for the final value in the input array
     """
-    # If any data in the 6-day window is missing, return NaNs
+    ## return NaN if any missing data in the past 6 days
     if np.isnan(p).any():
         return np.nan#, np.nan
 
-    psum = np.sum(p[:-1]) # Previous 5 days
-    pob = p[-1]           # Current day
+    psum = np.sum(p[:-1])
+    pob = p[-1]
 
+    ## if no precip is recorded, just return zero
     if pob == 0.0:
-        return 0.0#, 0.0
+        return 0.0
 
-    # Curve number selection
-    if psum < 1.0:
-        cn = 55
-    elif psum > 1.6:
-        cn = 88
-    else:
+    ## curve number selection
+    if psum < 1.0: ## more permeable if less than one inch precip
+        #cn = 55
+        cn = 39
+    elif psum > 1.6: ## gradually less permeable
+        #cn = 88
         cn = 74
+    else:
+        #cn = 74
+        cn = 61
 
-    s = -1.0 + 100.0 / cn
+    ## potential maximum soil retention
+    ## usually 1000/cn - 10 ??
+    #s = -1.0 + 100.0 / cn
+    s = -10.0 + 1000.0 / cn
 
-    # Initial precipitation loss (Io)
-    # p[-2:-5:-1] steps backwards through the 3 preceding days:
-    # p[-2], p[-3], p[-4]
+    ## initial precipitation loss (Io)
+    ## step backward through past 3 days
     Io = 0.0
     for val in p[-2:-5:-1]:
         if val <= 0.05:
@@ -298,10 +359,12 @@ def _effect(p):
             break
 
     a = max(pob - Io, 0.0)
+
+    ## initial abstraction is a ratio of potential max soil retention
     Ia = 0.2 * s
 
     if pob <= Ia:
-        return float(a)#, 0.0
+        return float(a)
 
     q = ((pob - Ia) ** 2) / (pob - Ia + s)
     fi = a - q

@@ -21,11 +21,11 @@ if __name__=="__main__":
     #usdm_csv_path = Path("data/usdm/USDM-baker-county-ga.csv")
 
     plot_windows = [
-        #15,
+        15,
         30,
-        #45,
+        45,
         60,
-        #90,
+        90,
         ]
 
     inches = True
@@ -34,6 +34,12 @@ if __name__=="__main__":
         "precip",
         "eff_precip",
         "avg_precip",
+        ]
+
+    standard_precip_forms = [
+        #"spi",
+        "wspi",
+        #"jng",
         ]
 
     line_labels = {
@@ -50,6 +56,11 @@ if __name__=="__main__":
         "jng_45":"45-day SPIe",
         "jng_60":"60-day SPIe",
         "jng_90":"90-day SPIe",
+        "wspi_15":"15-day wSPI",
+        "wspi_30":"30-day wSPI",
+        "wspi_45":"45-day wSPI",
+        "wspi_60":"60-day wSPI",
+        "wspi_90":"90-day wSPI",
         }
 
     line_colors = {
@@ -66,6 +77,11 @@ if __name__=="__main__":
         "jng_45":"#dbaa65",
         "jng_60":"#db8865",
         "jng_90":"#db6565",
+        "wspi_15":"#c3db65",
+        "wspi_30":"#dbcb65",
+        "wspi_45":"#dbaa65",
+        "wspi_60":"#db8865",
+        "wspi_90":"#db6565",
         }
     line_style = {
         "avg_precip":"solid",
@@ -81,6 +97,11 @@ if __name__=="__main__":
         "jng_45":"dashed",
         "jng_60":"dashed",
         "jng_90":"dashed",
+        "wspi_15":"dashdot",
+        "wspi_30":"dashdot",
+        "wspi_45":"dashdot",
+        "wspi_60":"dashdot",
+        "wspi_90":"dashdot",
         }
 
     usdm_field_colors = {
@@ -164,8 +185,8 @@ if __name__=="__main__":
 
     sp = {}
     for wk in map(str, plot_windows):
-        sp[f"spi_{wk}"] = data["spi"][wk][dix0:dixf]
-        sp[f"jng_{wk}"] = data["jng"][wk][dix0:dixf]
+        for sk in standard_precip_forms:
+            sp[f"{sk}_{wk}"] = data[sk][wk][dix0:dixf]
 
     sp_labels = list(sorted(sp.keys()))
     pc_labels = list(sorted(pc.keys()))
@@ -188,7 +209,7 @@ if __name__=="__main__":
                 ],
             "y_ranges":[(-3, 3), None],
             "legend_ncols":2,
-            "legend_loc":"lower right",
+            "legend_loc":"upper left",
             "legend_fontsize":6,
             "time_locator":"day",
             "time_locator_interval":14,

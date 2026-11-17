@@ -12,7 +12,7 @@ from helpers import generate_daily,effect
 
 def calc_crn_spi(
         zarr_store_crn, zarr_store_ghcn, crn_ghcn_mapping,
-        window_dists_spi, window_dists_jng,
+        window_dists_spi, window_dists_jng, window_dists_wspi,
         start_day=None, end_day=None, nan_thresh=0.1, daily_nan_thresh=0.3,
         ):
     """
@@ -31,6 +31,7 @@ def calc_crn_spi(
         when aggregating to daily
     """
     assert set(window_dists_spi.keys()) == set(window_dists_jng.keys())
+    assert set(window_dists_spi.keys()) == set(window_dists_wspi.keys())
     max_window_days = max(window_dists_spi.keys())
     zcrn = zarr.open(zarr_store_crn, mode="r")
     zghcn = zarr.open(zarr_store_ghcn, mode="r")
@@ -60,6 +61,7 @@ def calc_crn_spi(
             "precip":None,
             "eff_precip":None,
             "avg_precip":None,
+            "wspi":{w:[] for w in window_dists_spi.keys()},
             "spi":{w:[] for w in window_dists_spi.keys()},
             "jng":{w:[] for w in window_dists_spi.keys()},
             "acc":{w:[] for w in window_dists_spi.keys()},
@@ -82,14 +84,19 @@ def calc_crn_spi(
             if d > end_day:
                 break
             dates.append(d)
-            nan_frac = np.count_nonzero(np.isnan(vs) / vs.size)
+            nan_frac = np.count_nonzero(np.isnan(vs)) / vs.size
             if nan_frac > daily_nan_thresh:
                 precip.append(np.nan)
             else:
                 precip.append(np.nansum(vs))
 
+        zgs = zghcn[f"/stations/{sid_g}"]
+        weight_method = zgs.attrs["wspi"]["weight_method"]
+        weight_scale = zgs.attrs["wspi"]["weight_scale"]
+
         ## for each window size, calculate the accumulated precip from crn
         acc_precip = {}
+        acc_wprecip = {}
         acc_eprecip = {}
         dix0 = dates.index(start_day)
         dixf = dates.index(end_day)
@@ -98,12 +105,29 @@ def calc_crn_spi(
         eprecip = effect(precip / 25.4) * 25.4
         eprecip[eprecip<0] = 0
         for wsize,_ in window_dists_spi.items():
+            ## weights for wspi
+            warr = np.linspace(0, 1, wsize)
+            if weight_method == "gamma":
+                warr = warr ** weight_scale
+            elif weight_method == "sigmoid":
+                warr = 1 / (1 + np.exp(-1 * weight_scale * (warr-.5)))
+            else:
+                raise ValueError(
+                    f"unrecognized weighting method: {weight_method}"
+                    )
+
             ## precip
             pwindow = sliding_window_view(precip[dix0-wsize+1:dixf+1], wsize)
             m_invalid = np.count_nonzero(np.isnan(pwindow), axis=1)
             m_invalid = (m_invalid / pwindow.shape[1]) > nan_thresh
             psum = np.where(m_invalid, np.nan, np.nansum(pwindow,axis=1))
             acc_precip[wsize] = psum
+
+            ## weighted precip
+            wsum = np.where(
+                m_invalid, np.nan, np.nansum(pwindow * warr, axis=1)
+                )
+            acc_wprecip[wsize] = wsum
 
             ## jng effective precip
             epwindow = sliding_window_view(eprecip[dix0-wsize+1:dixf+1], wsize)
@@ -112,10 +136,10 @@ def calc_crn_spi(
             epsum = np.where(m_invalid, np.nan, np.nansum(epwindow,axis=1))
             acc_eprecip[wsize] = epsum
 
-        zgs = zghcn[f"/stations/{sid_g}"]
         lg_window = zgs.attrs["labels"]["window"]
         lg_dist = zgs.attrs["labels"]["dist"]
         dist_params_spi = zgs["spi-params"][...]
+        dist_params_wspi = zgs["wspi-params"][...]
         dist_params_jng = zgs["jng-params"][...]
         precip_doy_avg = zgs["precip-avg"][...]
 
@@ -137,8 +161,10 @@ def calc_crn_spi(
         spi[sid_c]["avg_precip"] = np.take(precip_doy_avg, doy_ixs).tolist()
         for wsize in window_dists_spi.keys():
             wdist_spi = window_dists_spi[wsize]
+            wdist_wspi = window_dists_wspi[wsize]
             wdist_jng = window_dists_jng[wsize]
             dix_spi = lg_dist.index(wdist_spi)
+            dix_wspi = lg_dist.index(wdist_wspi)
             dix_jng = lg_dist.index(wdist_jng)
             wix = lg_window.index(wsize)
             doy_dists_spi = [
@@ -146,6 +172,12 @@ def calc_crn_spi(
                     v for v in doy_params if not np.isnan(v)
                     ])
                 for doy_params in dist_params_spi[dix_spi, wix].tolist()
+                ]
+            doy_dists_wspi = [
+                getattr(spstats, wdist_wspi)(*[
+                    v for v in doy_params if not np.isnan(v)
+                    ])
+                for doy_params in dist_params_wspi[dix_spi, wix].tolist()
                 ]
             doy_dists_jng = [
                 getattr(spstats, wdist_jng)(*[
@@ -155,17 +187,22 @@ def calc_crn_spi(
                 ]
             psum = acc_precip[wsize]
             epsum = acc_eprecip[wsize]
+            wpsum = acc_wprecip[wsize]
 
             ## stand-in until probability mass shifting is implemented
             psum[psum <= 0] = 0.001
             epsum[epsum <= 0] = 0.001
+            wpsum[wpsum <= 0] = 0.001
 
             for i,doy in enumerate(doy_ixs):
                 dist_spi = doy_dists_spi[doy]
                 z_spi = spstats.norm.ppf(dist_spi.cdf(psum[i]))
                 dist_jng = doy_dists_jng[doy]
                 z_jng = spstats.norm.ppf(dist_jng.cdf(epsum[i]))
+                dist_wspi = doy_dists_wspi[doy]
+                z_wspi = spstats.norm.ppf(dist_wspi.cdf(wpsum[i]))
                 spi[sid_c]["spi"][wsize].append(float(z_spi))
+                spi[sid_c]["wspi"][wsize].append(float(z_wspi))
                 spi[sid_c]["jng"][wsize].append(float(z_jng))
                 spi[sid_c]["acc"][wsize].append(float(psum[i]))
     return spi
@@ -197,6 +234,13 @@ if __name__=="__main__":
         60:"weibull_min",
         90:"fisk",
         }
+    window_dists_wspi = {
+        15:"gamma",
+        30:"gamma",
+        45:"gamma",
+        60:"gamma",
+        90:"gamma",
+        }
 
     ## fraction of NaN crn values to allow to calculate precip sum
     nan_thresh = 0.1
@@ -215,6 +259,7 @@ if __name__=="__main__":
         zarr_store_ghcn=zarr_store_ghcn,
         crn_ghcn_mapping=crn_ghcn_stations,
         window_dists_spi=window_dists_spi,
+        window_dists_wspi=window_dists_wspi,
         window_dists_jng=window_dists_jng,
         start_day=start_day,
         end_day=end_day,

@@ -16,7 +16,8 @@ def mp_get_station_spi(args):
 
 def get_station_spi(
         zarr_store, station_id, distributions, windows, hist_bins,
-        hist_bounds_spi, hist_bounds_jng,
+        hist_bounds_spi, hist_bounds_jng, hist_bounds_wspi,
+        weight_scale=1., weight_method="gamma",
         start_day=None, end_day=None, nan_thresh=0.3,
         ):
     zs = zarr.open(zarr_store, path=f"/stations/{station_id}", mode="a")
@@ -36,7 +37,7 @@ def get_station_spi(
     #precip_flags = zs["precip-attr"][...]
     if "mdpr" in zs.keys():
         mdpr = zs["mdpr"][...]
-        mdpr_flags = zs["mdpr"][...]
+        #mdpr_flags = zs["mdpr-attr"][...]
         dapr = zs["dapr"][...]
         dapr_flags = zs["dapr"][...]
         ix_md = np.where(np.isfinite(mdpr) & (dapr > 0))[0]
@@ -74,21 +75,39 @@ def get_station_spi(
     doy_avg = np.full((366,), np.nan)
 
     ## final axis is (num samples, num zero precip samples)
-    samples_spi = np.empty((len(windows), 366, 2), dtype=np.uint16)
+    samples_spi = np.full((len(windows), 366, 2), 0, dtype=np.uint32)
     err_spi = np.empty((len(distributions), len(windows), 366, 3))
     params_spi = np.empty((len(distributions), len(windows), 366, 3))
     hist_y_spi = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
     hist_x_spi = None
 
-    samples_jng = np.empty((len(windows), 366, 2), dtype=np.uint16)
+    samples_wspi = np.full((len(windows), 366, 2), 0, dtype=np.uint32)
+    err_wspi = np.empty((len(distributions), len(windows), 366, 3))
+    params_wspi = np.empty((len(distributions), len(windows), 366, 3))
+    hist_y_wspi = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
+    hist_x_wspi = None
+
+    samples_jng = np.full((len(windows), 366, 2), 0, dtype=np.uint32)
     err_jng = np.empty((len(distributions), len(windows), 366, 3))
     params_jng = np.empty((len(distributions), len(windows), 366, 3))
     hist_y_jng = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
     hist_x_jng = None
     for wix,wsize in enumerate(windows):
+        ## determine weights
+        warr = np.linspace(0, 1, wsize)
+        if weight_method == "gamma":
+            warr = warr ** weight_scale
+        elif weight_method == "sigmoid":
+            warr = 1 / (1 + np.exp(-1 * weight_scale * (warr-.5)))
+        else:
+            raise ValueError(f"unrecognized weighting method: {weight_method}")
+        #print([float(f"{v:.3f}") for v in warr])
+
         for dix,slcs in enumerate(doy_window_slices(dates, wsize)):
-            ## normal precip fitting
+            ## normal and weighted spi fitting
             samples_spi[wix, dix] = np.array([len(slcs), 0])
+
+            wagg = []
             pagg = []
             pavg = []
             for s in slcs:
@@ -98,14 +117,21 @@ def get_station_spi(
                 if np.count_nonzero(np.isnan(x))/x.size > nan_thresh:
                     continue
                 xsum = np.nansum(x)
-                if xsum == 0:
+                wsum = np.nansum(x * warr)
+                if xsum <= 0:
                     samples_spi[wix, dix, 1] += 1
                 else:
                     pagg.append(xsum)
+                if wsum <= 0:
+                    samples_wspi[wix, dix, 1] += 1
+                else:
+                    wagg.append(wsum)
             pagg = np.array(pagg)
+            wagg = np.array(wagg)
 
             doy_avg[dix] = np.average(pavg)
 
+            ## normal spi
             #print(station_id,wix,dix,pagg.size,np.amin(pagg),np.amax(pagg))
             tmp_params_spi,tmp_err_spi,(hx_spi,hy_spi) = fit_and_check_dists(
                 x=pagg,
@@ -128,7 +154,31 @@ def get_station_spi(
             params_spi[:, wix, dix, :] = np.asarray(tmp_params_spi)
             err_spi[:, wix, dix, :] = np.asarray(tmp_err_spi)
 
-            ## effective precip fitting
+            ## weighted spi
+            #print(station_id,wix,dix,pagg.size,np.amin(pagg),np.amax(pagg))
+            tmp_params_wspi,tmp_err_wspi,h_wspi = fit_and_check_dists(
+                x=wagg,
+                distributions=distributions,
+                hist_bins=hist_bins,
+                hist_bounds=hist_bounds_wspi,
+                return_hist=True,
+                scipy_fit_kwargs={"floc":0},
+                nparams=2,
+                )
+            hx_wspi,hy_wspi = h_wspi
+            if hist_x_wspi is None:
+                hist_x_wspi = hx_wspi
+            #print(np.unique(hy))
+            hist_y_wspi[wix, dix] = hy_wspi
+            tmp_params_wspi = np.array([
+                p if len(p)==3 else [*p, np.nan]
+                for p in tmp_params_wspi
+                ])
+            tmp_err_wspi = np.array(tmp_err_wspi).T
+            params_wspi[:, wix, dix, :] = np.asarray(tmp_params_wspi)
+            err_wspi[:, wix, dix, :] = np.asarray(tmp_err_wspi)
+
+            ## effective spi fitting
             samples_jng[wix, dix] = np.array([len(slcs), 0])
             eagg = []
             for s in slcs:
@@ -164,6 +214,12 @@ def get_station_spi(
             err_jng[:, wix, dix, :] = np.asarray(tmp_err_jng)
 
     if "spi-params" in zs.keys():
+        del zs["wspi-samples"]
+        del zs["wspi-params"]
+        del zs["wspi-err"]
+        del zs["wspi-hist-x"]
+        del zs["wspi-hist-y"]
+
         del zs["spi-samples"]
         del zs["spi-params"]
         del zs["spi-err"]
@@ -184,6 +240,12 @@ def get_station_spi(
     zs.create_array("spi-hist-x", data=hist_x_spi)
     zs.create_array("spi-hist-y", data=hist_y_spi)
 
+    zs.create_array("wspi-samples", data=samples_wspi)
+    zs.create_array("wspi-params", data=params_wspi)
+    zs.create_array("wspi-err", data=err_wspi)
+    zs.create_array("wspi-hist-x", data=hist_x_wspi)
+    zs.create_array("wspi-hist-y", data=hist_y_wspi)
+
     zs.create_array("jng-samples", data=samples_jng)
     zs.create_array("jng-params", data=params_jng)
     zs.create_array("jng-err", data=err_jng)
@@ -197,7 +259,11 @@ def get_station_spi(
             "window":windows,
             "err":["sse", "ad", "aic"],
             "sample":["total", "zero"],
-            }
+            },
+        "wspi":{
+            "weight_method":weight_method,
+            "weight_scale":weight_scale,
+            },
         })
     print(f"Finished {station_id}")
 
@@ -216,11 +282,16 @@ if __name__=="__main__":
         ]
 
     agg_windows = [15, 30, 45, 60, 90]
-    ## fraction of nan values allowed per day over which precip sum is ignored
-    daily_nan_thresh = .2
+    ## fraction of nan values allowed per summing window
+    nan_thresh = .2
     hist_bins = 48
     hist_bounds_spi = (0, 768)
-    hist_bounds_jng = (0, 448)
+    hist_bounds_jng = (0, 768)
+    hist_bounds_wspi = (0, 384)
+    #weight_scale = 0.4
+    #weight_method = "gamma"
+    weight_scale = 5
+    weight_method = "sigmoid"
 
     #start_time = datetime(2014, 1, 1, 0)
     #end_time = datetime(2014, 1, 31, 23)
@@ -249,8 +320,11 @@ if __name__=="__main__":
         "windows":agg_windows,
         "hist_bins":hist_bins,
         "hist_bounds_spi":hist_bounds_spi,
+        "hist_bounds_wspi":hist_bounds_wspi,
         "hist_bounds_jng":hist_bounds_jng,
-        "nan_thresh":daily_nan_thresh,
+        "weight_method":weight_method,
+        "weight_scale":weight_scale,
+        "nan_thresh":nan_thresh,
         } for sid in ghcn_stations]
     with Pool(nworkers) as pool:
         for a,r in pool.imap_unordered(mp_get_station_spi, args):

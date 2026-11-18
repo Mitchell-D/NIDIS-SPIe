@@ -208,8 +208,8 @@ def calc_crn_spi(
     return spi
 
 if __name__=="__main__":
-    zarr_store_crn = Path("data/zarr/crn_subhourly_2006-2026.zarr")
-    zarr_store_ghcn = Path("data/zarr/ghcnd.zarr")
+    zarr_store_crn = Path("data/zarr/crn_subhourly_2006-2026_OLD.zarr")
+    zarr_store_ghcn = Path("data/zarr/ghcnd_OLD.zarr")
     spi_json_path = Path("data/crn_spi.json")
 
     ## map crn stations to the ghcnd stations to get precip distributions from

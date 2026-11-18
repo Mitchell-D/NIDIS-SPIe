@@ -255,7 +255,7 @@ def parse_uscrn_subhourly_pkl_to_zarr(
         station_chunk_size, station_shard_size,
         var_chunk_size, var_shard_size,
         flag_chunk_size, flag_shard_size,
-        get_stations=None, nan_frac_thresh=0.3,
+        get_stations=None, nan_frac_thresh=0.3, nworkers=1,
         ):
     assert not zarr_store.exists() and zarr_store.parent.exists()
 
@@ -306,7 +306,7 @@ def parse_uscrn_subhourly_pkl_to_zarr(
                 "observation_times":pdata[time_var],
                 "output_times":all_hours,
                 "nan_fraction_threshold":nan_frac_thresh,
-                "quality_flags":pdata.get(flag_fields.get(fk)),
+                "quality_flags":pdata.get(flag_field_mapping.get(fk)),
                 "valid_quality_flag":0,
 
                 "fix":fix,

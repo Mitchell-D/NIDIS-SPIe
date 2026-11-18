@@ -269,7 +269,7 @@ def get_station_spi(
 
 if __name__=="__main__":
     #zarr_store = Path("data/zarr/crn_subhourly_2006-2026.zarr")
-    zarr_store = Path("data/zarr/ghcnd.zarr")
+    zarr_store = Path("data/zarr/ghcnd_OLD.zarr")
     crn_ghcn_mapping_path = Path("data/crn_ghcn_station_mapping.json")
 
     #get_stations = ["AL_Gadsden_19_N", "AL_Selma_13_WNW", "AL_Fairhope_3_NE"]

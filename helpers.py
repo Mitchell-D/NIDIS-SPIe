@@ -336,13 +336,13 @@ def _effect(p):
     ## curve number selection
     if psum < 1.0: ## more permeable if less than one inch precip
         #cn = 55
-        cn = 39
+        cn = 39 + 3.9
     elif psum > 1.6: ## gradually less permeable
         #cn = 88
-        cn = 74
+        cn = 74 + 7.4
     else:
         #cn = 74
-        cn = 61
+        cn = 61 + 6.1
 
     ## potential maximum soil retention
     ## usually 1000/cn - 10 ??

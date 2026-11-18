@@ -11,6 +11,7 @@ from extract_uscrn_pkl_subhourly import mp_parse_uscrn_subhourly
 from parse_uscrn_subhourly_pkl_to_zarr import parse_uscrn_subhourly_pkl_to_zarr
 from check_ghcnd_inventory import download_closest_ghcnd
 from parse_ghcn_daily_to_zarr import parse_ghcnd_csv
+from calc_spi_dists import mp_get_station_spi
 
 if __name__=="__main__":
     ## uscrn source data download location
@@ -34,26 +35,26 @@ if __name__=="__main__":
     ## download options
     download_start_year = 2006
     download_end_year = 2026
-    download_crn_stations = [
-        #"AL_Russellville_4_SSE",
+    get_crn_stations = [
+        "AL_Russellville_4_SSE",
         "AL_Fairhope_3_NE",
-        #"AL_Cullman_3_ENE",
-        #"AL_Troy_2_W",
+        "AL_Cullman_3_ENE",
+        "AL_Troy_2_W",
         "AL_Talladega_10_NNE",
-        #"AL_Selma_6_SSE",
-        #"AL_Scottsboro_2_NE",
-        #"AL_Thomasville_2_S",
-        #"AL_Highland_Home_2_S",
-        #"AL_Gainesville_2_NE",
-        #"AL_Selma_13_WNW",
-        #"AL_Valley_Head_1_SSW",
+        "AL_Selma_6_SSE",
+        "AL_Scottsboro_2_NE",
+        "AL_Thomasville_2_S",
+        "AL_Highland_Home_2_S",
+        "AL_Gainesville_2_NE",
+        "AL_Selma_13_WNW",
+        "AL_Valley_Head_1_SSW",
         "AL_Greensboro_2_WNW",
-        #"AL_Northport_2_S",
-        #"AL_Courtland_2_WSW",
+        "AL_Northport_2_S",
+        "AL_Courtland_2_WSW",
         "AL_Gadsden_19_N",
-        #"AL_Brewton_3_NNE",
-        #"AL_Muscle_Shoals_2_N",
-        #"AL_Clanton_2_NE",
+        "AL_Brewton_3_NNE",
+        "AL_Muscle_Shoals_2_N",
+        "AL_Clanton_2_NE",
         "GA_Newton_8_W",
         "GA_Newton_11_SW",
         ]
@@ -125,10 +126,11 @@ if __name__=="__main__":
 
     nworkers = 6
 
-    download_source_csvs = True
-    extract_uscrn_pkls = True
-    parse_to_zarr = True
-    download_ghcnd = True
+    download_source_csvs = False
+    extract_uscrn_pkls = False
+    parse_to_zarr = False
+    download_ghcnd = False
+    extract_ghcnd = False
     get_distributions = True
 
     """ ------------( end normal configuration )------------ """
@@ -138,7 +140,7 @@ if __name__=="__main__":
         download_uscrn_stations(
             start_year=download_start_year,
             end_year=download_end_year,
-            station_names=download_crn_stations,
+            station_names=get_crn_stations,
             out_dir=src_csv_dir,
             base_url=uscrn_base_url,
             )
@@ -147,9 +149,9 @@ if __name__=="__main__":
         for p in src_csv_dir.iterdir():
             _,_,yyyy,sid = p.stem.split("-")
             yyyy = int(yyyy)
-            if not sid in get_stations:
+            if not sid in get_crn_stations:
                 continue
-            if not yyyy in range(start_year, end_year+1):
+            if not yyyy in range(download_start_year, download_end_year+1):
                 continue
             if not sid in sfiles.keys():
                 sfiles[sid] = []
@@ -210,6 +212,7 @@ if __name__=="__main__":
             flag_shard_size=flag_shard_size,
             get_stations=zarr_get_stations,
             nan_frac_thresh=subhourly_nan_frac_thresh,
+            nworkers=nworkers,
             )
 
     if download_ghcnd:
@@ -223,7 +226,7 @@ if __name__=="__main__":
             ghcn_csv_template=ghcnd_csv_template,
             degree_threshold=degree_thresh,
             por_years_threshold=por_years_thresh,
-            check_close_to_stations=download_crn_stations,
+            check_close_to_stations=get_crn_stations,
             )
 
     if extract_ghcnd:
@@ -263,11 +266,11 @@ if __name__=="__main__":
         zgrp = zarr.open(ghcnd_zarr_path, mode="r")
         all_stations = list(zgrp["stations"].keys())
         ghcn_stations = []
-        if get_stations is None:
+        if get_crn_stations is None:
             ghcn_stations = all_stations
         else:
-            cgsm = json.load(crn_ghcn_mapping_path.open("r"))
-            for crn_key in get_stations:
+            cgsm = json.load(crn_ghcn_mapping_json_path.open("r"))
+            for crn_key in get_crn_stations:
                 ghcn_stations += [v["ghcn_id"] for v in cgsm[crn_key]]
         ghcn_stations = list(set(ghcn_stations))
 

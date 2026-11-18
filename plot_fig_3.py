@@ -21,11 +21,11 @@ if __name__=="__main__":
     #usdm_csv_path = Path("data/usdm/USDM-baker-county-ga.csv")
 
     plot_windows = [
-        15,
+        #15,
         30,
-        45,
+        #45,
         60,
-        90,
+        #90,
         ]
 
     inches = True
@@ -37,7 +37,7 @@ if __name__=="__main__":
         ]
 
     standard_precip_forms = [
-        #"spi",
+        "spi",
         "wspi",
         #"jng",
         ]
@@ -112,7 +112,7 @@ if __name__=="__main__":
         "D4":"#730000",
         }
 
-    start_day = datetime(2024, 5, 29)
+    start_day = datetime(2024, 3, 14)
     end_day = datetime(2024, 11, 10)
 
     """ ------------( end normal configuration )------------ """
@@ -210,7 +210,7 @@ if __name__=="__main__":
             "y_ranges":[(-3, 3), None],
             "legend_ncols":2,
             "legend_loc":"upper left",
-            "legend_fontsize":6,
+            "legend_fontsize":8,
             "time_locator":"day",
             "time_locator_interval":14,
             "xtick_rotation":45,

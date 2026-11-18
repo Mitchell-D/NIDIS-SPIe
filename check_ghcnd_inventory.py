@@ -64,8 +64,12 @@ def download_closest_ghcnd(
                 ghcn_id=gd["ghcn_id"],
                 )
             url = ghcn_base_url + fname
+            out_path = ghcn_out_dir.joinpath(fname)
+            if out_path.exists():
+                print(f"skipping existing: {out_path.as_posix()}")
+                continue
             resp = requests.get(url, stream=True)
-            with ghcn_out_dir.joinpath(fname).open("wb") as outf:
+            with out_path.open("wb") as outf:
                 for chunk in resp.iter_content(chunk_size=8192):
                     outf.write(chunk)
 

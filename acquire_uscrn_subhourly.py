@@ -45,7 +45,9 @@ def download_file(session, url, out_dir):
     print(f"saved {output_path}")
 
 
-def download_stations(start_year, end_year, station_names, out_dir, base_url):
+def download_uscrn_stations(
+        start_year, end_year, station_names, out_dir, base_url
+        ):
     """
     download all USCRN subhourly text files whose filenames contain
     one of the supplied station-name substrings.

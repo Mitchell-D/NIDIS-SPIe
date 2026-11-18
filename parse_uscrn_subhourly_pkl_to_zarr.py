@@ -248,45 +248,15 @@ def agg_to_hour(
 
     return result
 
-if __name__=="__main__":
-    data_dir = Path("/rstor/mdodson/nidis_spie")
-    pkl_dir = data_dir.joinpath("pkls/subhourly")
-    zarr_store = data_dir.joinpath("zarr/crn_subhourly_2006-2026.zarr")
-
-    start_time = datetime(2005, 4, 1, 0, 0)
-    end_time = datetime(2026, 10, 1, 23, 0)
-    nworkers = 20
-    time_var = "time-utc" ## can also be "time-local"
-
-    time_chunk_size = 24 * 64
-    time_shard_size = time_chunk_size * 12
-    station_chunk_size = 4
-    station_shard_size = station_chunk_size * 6
-    var_chunk_size = 4
-    var_shard_size = var_chunk_size * 8
-    flag_chunk_size = 4
-    flag_shard_size = flag_chunk_size * 8
-
-    keep_float_fields = [
-        "temp", "precip", "swdown", "stemp", "rh", "sm-2in", "st-2in",
-        "wetn", "wspd",
-        ]
-
-    flag_fields = {
-        "swdown":"flag-swdown",
-        "stemp":"flag-stemp",
-        "rh":"flag-rh",
-        "wetn":"flag-wetn",
-        "wspd":"flag-wspd",
-        "stemp":"flag-stemp",
-        }
-
-    nan_frac_thresh = 0.3
-
-    get_stations = None
-
-    """ ------------( end normal configuration )------------ """
-
+def parse_uscrn_subhourly_pkl_to_zarr(
+        zarr_store, pkl_dir, start_time, end_time, time_var,
+        keep_float_fields, flag_field_mapping,
+        time_chunk_size, time_shard_size,
+        station_chunk_size, station_shard_size,
+        var_chunk_size, var_shard_size,
+        flag_chunk_size, flag_shard_size,
+        get_stations=None, nan_frac_thresh=0.3,
+        ):
     assert not zarr_store.exists() and zarr_store.parent.exists()
 
     ## truncate hours and get the full timeline
@@ -418,3 +388,62 @@ if __name__=="__main__":
         })
     zarr.consolidate_metadata(zarr_store)
     print("finished")
+
+if __name__=="__main__":
+    data_dir = Path("/rstor/mdodson/nidis_spie")
+    pkl_dir = data_dir.joinpath("pkls/subhourly")
+    zarr_store = data_dir.joinpath("zarr/crn_subhourly_2006-2026.zarr")
+
+    start_time = datetime(2005, 4, 1, 0, 0)
+    end_time = datetime(2026, 10, 1, 23, 0)
+    nworkers = 20
+    time_var = "time-utc" ## can also be "time-local"
+
+    time_chunk_size = 24 * 64
+    time_shard_size = time_chunk_size * 12
+    station_chunk_size = 4
+    station_shard_size = station_chunk_size * 6
+    var_chunk_size = 4
+    var_shard_size = var_chunk_size * 8
+    flag_chunk_size = 4
+    flag_shard_size = flag_chunk_size * 8
+
+    keep_float_fields = [
+        "temp", "precip", "swdown", "stemp", "rh", "sm-2in", "st-2in",
+        "wetn", "wspd",
+        ]
+
+    flag_fields = {
+        "swdown":"flag-swdown",
+        "stemp":"flag-stemp",
+        "rh":"flag-rh",
+        "wetn":"flag-wetn",
+        "wspd":"flag-wspd",
+        "stemp":"flag-stemp",
+        }
+
+    nan_frac_thresh = 0.3
+
+    get_stations = None
+
+    """ ------------( end normal configuration )------------ """
+
+    parse_uscrn_subhourly_pkl_to_zarr(
+        zarr_store=zarr_store,
+        pkl_dir=pkl_dir,
+        start_time=start_time,
+        end_time=end_time,
+        time_var=time_var,
+        keep_float_fields=keep_float_fields,
+        flag_field_mapping=flag_fields,
+        time_chunk_size=time_chunk_size,
+        time_shard_size=time_shard_size,
+        station_chunk_size=station_chunk_size,
+        station_shard_size=station_shard_size,
+        var_chunk_size=var_chunk_size,
+        var_shard_size=var_shard_size,
+        flag_chunk_size=flag_chunk_size,
+        flag_shard_size=flag_shard_size,
+        get_stations=get_stations,
+        nan_frac_thresh=nan_frac_thresh,
+        )

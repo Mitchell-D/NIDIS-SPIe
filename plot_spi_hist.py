@@ -13,15 +13,17 @@ if __name__=="__main__":
     zarr_store = Path("data/zarr/ghcnd.zarr")
     fig_dir = Path("figures/spi-err")
 
+    #precip_type = "dspi"
     precip_type = "spi"
     #precip_type = "jng"
     #sid = "USC00016161"
     #sid = "USC00091500"
-    sid = "USC00017963"
+    sid = "USC00013620"
     window = 45
     doy_ix = 200
 
     zs = zarr.open(zarr_store, mode="r", path=f"/stations/{sid}")
+    print(dict(zs.attrs))
     l_dist = zs.attrs["labels"]["dist"]
     l_window = zs.attrs["labels"]["window"]
     l_err = zs.attrs["labels"]["err"]

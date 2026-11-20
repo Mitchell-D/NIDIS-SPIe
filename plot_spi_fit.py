@@ -232,7 +232,7 @@ if __name__=="__main__":
             bar_order=list(sorted(l_dist)),
             )
 
-    ## plot WSPI generalized over stations
+    ## plot wSPI generalized over stations
     derr = np.concatenate([
         zgrp[f"/stations/{sid}/wspi-err"][...]
         for sid in zgrp["stations"].keys()
@@ -264,6 +264,42 @@ if __name__=="__main__":
                 },
             #show=True,
             fig_path=fig_dir.joinpath(f"wspi_err-bars_{ek}_all-stations.png"),
+            group_order=list(sorted(l_window)),
+            bar_order=list(sorted(l_dist)),
+            )
+
+    ## plot dSPI generalized over stations
+    derr = np.concatenate([
+        zgrp[f"/stations/{sid}/dspi-err"][...]
+        for sid in zgrp["stations"].keys()
+        ], axis=2)
+
+    for eix,ek in enumerate(l_err):
+        ev = derr[...,eix]
+        eavg = np.average(ev, axis=2)
+        edata = {}
+        for wix,wk in enumerate(l_window):
+            edata[wk] = {}
+            for dix,dk in enumerate(l_dist):
+                eavg = np.average(ev[dix,wix])
+                p10,p90 = np.percentile(ev[dix,wix], [10, 90])
+                edata[wk][dk] = (eavg, eavg-p10, p90-eavg)
+        plot_nested_bars(
+            data_dict=edata,
+            labels={},
+            plot_error_bars=True,
+            bar_colors=None,
+            plot_spec={
+                "title":f"Difference SPI GHCNd {long_labels_err[ek]}",
+                "cmap":"rainbow",
+                "ylabel":long_labels_err[ek],
+                "xlabel":"Window size",
+                "figsize":(16,12),
+                "yscale":"log" if ek=="ad" else "linear",
+                "legend_ncols":2,
+                },
+            #show=True,
+            fig_path=fig_dir.joinpath(f"dspi_err-bars_{ek}_all-stations.png"),
             group_order=list(sorted(l_window)),
             bar_order=list(sorted(l_dist)),
             )

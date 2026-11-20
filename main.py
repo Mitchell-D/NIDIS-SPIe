@@ -124,13 +124,13 @@ if __name__=="__main__":
     wspi_weight_scale = 5
     wspi_weight_method = "sigmoid"
 
-    nworkers = 6
+    nworkers = 10
 
-    download_source_csvs = False
-    extract_uscrn_pkls = False
-    parse_to_zarr = False
-    download_ghcnd = False
-    extract_ghcnd = False
+    download_source_csvs = True
+    extract_uscrn_pkls = True
+    parse_to_zarr = True
+    download_ghcnd = True
+    extract_ghcnd = True
     get_distributions = True
 
     """ ------------( end normal configuration )------------ """

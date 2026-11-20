@@ -14,9 +14,53 @@ from helpers import doy_window_slices,fit_and_check_dists,effect
 def mp_get_station_spi(args):
     return args,get_station_spi(**args)
 
+def get_ghcnd_precip(zarr_store, station_id):
+    zs = zarr.open(zarr_store, path=f"/stations/{station_id}", mode="a")
+    dates = zs["date"][...]
+    dts = dates.astype(datetime).tolist()
+
+    precip = zs["precip"][...]
+    #precip_flags = zs["precip-attr"][...]
+    if "mdpr" in zs.keys():
+        mdpr = zs["mdpr"][...]
+        #mdpr_flags = zs["mdpr-attr"][...]
+        dapr = zs["dapr"][...]
+        dapr_flags = zs["dapr"][...]
+        ix_md = np.where(np.isfinite(mdpr) & (dapr > 0))[0]
+        assert np.all(np.isfinite(mdpr[ix_md]))
+        for ix in ix_md:
+            slc = slice(ix-int(dapr[ix])+1, ix+1)
+            ## deal with some observations being present in the window
+            if not np.all(np.isnan(precip[slc])):
+                #print(
+                #    "WARNING: obs overlapped by mdpr; ignoring",
+                #    f"{dapr[ix]} days with {round(mdpr[ix])} mm precip,",
+                #    f"falling back on {round(np.nansum(precip[slc]))} mm",
+                #    station_id, dts[ix],
+                #    )
+
+                ## sometimes the multi day total is reported in the normal
+                ## precip array on the final day
+                if precip[ix] == mdpr[ix]:
+                    precip[slc] = np.full((int(dapr[ix]),), mdpr[ix]/dapr[ix])
+                ## otherwise distribute the total over NaN reports
+                else:
+                    inset_nans = np.isnan(precip[slc])
+                    inset = np.where(
+                        inset_nans,
+                        mdpr[ix] / np.count_nonzero(inset_nans),
+                        precip[slc],
+                        )
+                    precip[slc] = inset
+            ## otherwise distribute evenly within the window
+            else:
+                precip[slc] = np.full((int(dapr[ix]),), mdpr[ix]/dapr[ix])
+    eprecip = effect(precip / 25.4) * 25.4
+    return dts,precip,eprecip
+
 def get_station_spi(
         zarr_store, station_id, distributions, windows, hist_bins,
-        hist_bounds_spi, hist_bounds_jng, hist_bounds_wspi,
+        hist_bounds_spi, hist_bounds_jng, hist_bounds_wspi, hist_bounds_dspi,
         weight_scale=1., weight_method="gamma",
         start_day=None, end_day=None, nan_thresh=0.3,
         ):
@@ -60,17 +104,20 @@ def get_station_spi(
                 ## otherwise distribute the total over NaN reports
                 else:
                     inset_nans = np.isnan(precip[slc])
-                    inset = np.where(
-                        inset_nans,
-                        mdpr[ix] / np.count_nonzero(inset_nans),
-                        precip[slc],
-                        )
+                    nnan = np.count_nonzero(inset_nans)
+                    ## if no NaNs, assume the multi day precip is erroneous
+                    if nnan == 0:
+                        continue
+                    inset = np.where(inset_nans, mdpr[ix]/nnan, precip[slc])
                     precip[slc] = inset
             ## otherwise distribute evenly within the window
             else:
                 precip[slc] = np.full((int(dapr[ix]),), mdpr[ix]/dapr[ix])
 
     eprecip = effect(precip / 25.4) * 25.4
+    eprecip[eprecip < 0] = 0
+
+    dprecip = precip - eprecip
 
     doy_avg = np.full((366,), np.nan)
 
@@ -86,6 +133,12 @@ def get_station_spi(
     params_wspi = np.empty((len(distributions), len(windows), 366, 3))
     hist_y_wspi = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
     hist_x_wspi = None
+
+    samples_dspi = np.full((len(windows), 366, 2), 0, dtype=np.uint32)
+    err_dspi = np.empty((len(distributions), len(windows), 366, 3))
+    params_dspi = np.empty((len(distributions), len(windows), 366, 3))
+    hist_y_dspi = np.empty((len(windows), 366, hist_bins), dtype=np.float32)
+    hist_x_dspi = None
 
     samples_jng = np.full((len(windows), 366, 2), 0, dtype=np.uint32)
     err_jng = np.empty((len(distributions), len(windows), 366, 3))
@@ -178,6 +231,45 @@ def get_station_spi(
             params_wspi[:, wix, dix, :] = np.asarray(tmp_params_wspi)
             err_wspi[:, wix, dix, :] = np.asarray(tmp_err_wspi)
 
+            ## difference spi
+            dagg = []
+            for s in slcs:
+                x = dprecip[s]
+                if np.count_nonzero(np.isnan(x))/x.size > nan_thresh:
+                    continue
+                dsum = np.nansum(x)
+                if dsum <= 0:
+                    samples_dspi[wix, dix, 1] += 1
+                else:
+                    dagg.append(dsum)
+                if dsum <= 0:
+                    samples_dspi[wix, dix, 1] += 1
+                else:
+                    dagg.append(dsum)
+            dagg = np.array(dagg)
+
+            ## difference SPI
+            tmp_params_dspi,tmp_err_dspi,h_dspi = fit_and_check_dists(
+                x=dagg,
+                distributions=distributions,
+                hist_bins=hist_bins,
+                hist_bounds=hist_bounds_dspi,
+                return_hist=True,
+                scipy_fit_kwargs={"floc":0},
+                nparams=2,
+                )
+            hx_dspi,hy_dspi = h_dspi
+            if hist_x_dspi is None:
+                hist_x_dspi = hx_dspi
+            hist_y_dspi[wix, dix] = hy_dspi
+            tmp_params_dspi = np.array([
+                p if len(p)==3 else [*p, np.nan]
+                for p in tmp_params_dspi
+                ])
+            tmp_err_dspi = np.array(tmp_err_dspi).T
+            params_dspi[:, wix, dix, :] = np.asarray(tmp_params_dspi)
+            err_dspi[:, wix, dix, :] = np.asarray(tmp_err_dspi)
+
             ## effective spi fitting
             samples_jng[wix, dix] = np.array([len(slcs), 0])
             eagg = []
@@ -220,6 +312,12 @@ def get_station_spi(
         del zs["wspi-hist-x"]
         del zs["wspi-hist-y"]
 
+        del zs["dspi-samples"]
+        del zs["dspi-params"]
+        del zs["dspi-err"]
+        del zs["dspi-hist-x"]
+        del zs["dspi-hist-y"]
+
         del zs["spi-samples"]
         del zs["spi-params"]
         del zs["spi-err"]
@@ -239,6 +337,12 @@ def get_station_spi(
     zs.create_array("spi-err", data=err_spi)
     zs.create_array("spi-hist-x", data=hist_x_spi)
     zs.create_array("spi-hist-y", data=hist_y_spi)
+
+    zs.create_array("dspi-samples", data=samples_dspi)
+    zs.create_array("dspi-params", data=params_dspi)
+    zs.create_array("dspi-err", data=err_dspi)
+    zs.create_array("dspi-hist-x", data=hist_x_dspi)
+    zs.create_array("dspi-hist-y", data=hist_y_dspi)
 
     zs.create_array("wspi-samples", data=samples_wspi)
     zs.create_array("wspi-params", data=params_wspi)
@@ -269,7 +373,7 @@ def get_station_spi(
 
 if __name__=="__main__":
     #zarr_store = Path("data/zarr/crn_subhourly_2006-2026.zarr")
-    zarr_store = Path("data/zarr/ghcnd_OLD.zarr")
+    zarr_store = Path("data/zarr/ghcnd.zarr")
     crn_ghcn_mapping_path = Path("data/crn_ghcn_station_mapping.json")
 
     #get_stations = ["AL_Gadsden_19_N", "AL_Selma_13_WNW", "AL_Fairhope_3_NE"]
@@ -288,10 +392,11 @@ if __name__=="__main__":
     hist_bounds_spi = (0, 768)
     hist_bounds_jng = (0, 768)
     hist_bounds_wspi = (0, 384)
-    #weight_scale = 0.4
-    #weight_method = "gamma"
-    weight_scale = 5
-    weight_method = "sigmoid"
+    hist_bounds_dspi = (0, 48)
+    weight_scale = 0.4
+    weight_method = "gamma"
+    #weight_scale = 5
+    #weight_method = "sigmoid"
 
     #start_time = datetime(2014, 1, 1, 0)
     #end_time = datetime(2014, 1, 31, 23)
@@ -321,6 +426,7 @@ if __name__=="__main__":
         "hist_bins":hist_bins,
         "hist_bounds_spi":hist_bounds_spi,
         "hist_bounds_wspi":hist_bounds_wspi,
+        "hist_bounds_dspi":hist_bounds_dspi,
         "hist_bounds_jng":hist_bounds_jng,
         "weight_method":weight_method,
         "weight_scale":weight_scale,

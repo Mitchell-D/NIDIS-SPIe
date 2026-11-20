@@ -13,19 +13,19 @@ if __name__=="__main__":
     spi_json_path = Path("data/crn_spi.json")
     fig_dir = Path("figures/spi_vs_acc")
 
-    plot_station = "AL_Fairhope_3_NE"
-    usdm_csv_path = Path("data/usdm/USDM-baldwin-county-al.csv")
+    #plot_station = "AL_Fairhope_3_NE"
+    #usdm_csv_path = Path("data/usdm/USDM-baldwin-county-al.csv")
 
-    #plot_station = "GA_Newton_8_W"
+    plot_station = "GA_Newton_8_W"
     #plot_station = "GA_Newton_11_SW"
-    #usdm_csv_path = Path("data/usdm/USDM-baker-county-ga.csv")
+    usdm_csv_path = Path("data/usdm/USDM-baker-county-ga.csv")
 
     plot_windows = [
         #15,
         30,
         #45,
-        60,
-        #90,
+        #60,
+        90,
         ]
 
     inches = True
@@ -34,11 +34,13 @@ if __name__=="__main__":
         "precip",
         "eff_precip",
         "avg_precip",
+        "diff_precip",
         ]
 
     standard_precip_forms = [
-        "spi",
-        "wspi",
+        "dspi"
+        #"spi",
+        #"wspi",
         #"jng",
         ]
 
@@ -46,6 +48,7 @@ if __name__=="__main__":
         "avg_precip":"Mean Precip",
         "precip":"Cumulative Precip",
         "eff_precip":"Cumulative Effective Precip",
+        "diff_precip":"Cumulative Runoff",
         "spi_15":"15-day SPI",
         "spi_30":"30-day SPI",
         "spi_45":"45-day SPI",
@@ -61,12 +64,18 @@ if __name__=="__main__":
         "wspi_45":"45-day wSPI",
         "wspi_60":"60-day wSPI",
         "wspi_90":"90-day wSPI",
+        "dspi_15":"15-day dSPI",
+        "dspi_30":"30-day dSPI",
+        "dspi_45":"45-day dSPI",
+        "dspi_60":"60-day dSPI",
+        "dspi_90":"90-day dSPI",
         }
 
     line_colors = {
         "avg_precip":"#65d5db",
         "precip":"#6575db",
         "eff_precip":"#65db98",
+        "diff_precip":"#c165db",
         "spi_15":"#c3db65",
         "spi_30":"#dbcb65",
         "spi_45":"#dbaa65",
@@ -82,11 +91,17 @@ if __name__=="__main__":
         "wspi_45":"#dbaa65",
         "wspi_60":"#db8865",
         "wspi_90":"#db6565",
+        "dspi_15":"#c3db65",
+        "dspi_30":"#dbcb65",
+        "dspi_45":"#dbaa65",
+        "dspi_60":"#db8865",
+        "dspi_90":"#db6565",
         }
     line_style = {
         "avg_precip":"solid",
         "precip":"solid",
         "eff_precip":"solid",
+        "diff_precip":"solid",
         "spi_15":"solid",
         "spi_30":"solid",
         "spi_45":"solid",
@@ -102,6 +117,11 @@ if __name__=="__main__":
         "wspi_45":"dashdot",
         "wspi_60":"dashdot",
         "wspi_90":"dashdot",
+        "dspi_15":(0, (3, 1, 1, 1)),
+        "dspi_30":(0, (3, 1, 1, 1)),
+        "dspi_45":(0, (3, 1, 1, 1)),
+        "dspi_60":(0, (3, 1, 1, 1)),
+        "dspi_90":(0, (3, 1, 1, 1)),
         }
 
     usdm_field_colors = {
@@ -112,8 +132,10 @@ if __name__=="__main__":
         "D4":"#730000",
         }
 
-    start_day = datetime(2024, 3, 14)
-    end_day = datetime(2024, 11, 10)
+    start_day = datetime(2024, 6, 1)
+    end_day = datetime(2024, 11, 30)
+    #start_day = datetime(2026, 1, 1)
+    #end_day = datetime(2026, 11, 10)
 
     """ ------------( end normal configuration )------------ """
 

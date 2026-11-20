@@ -13,6 +13,7 @@ from helpers import generate_daily,effect
 def calc_crn_spi(
         zarr_store_crn, zarr_store_ghcn, crn_ghcn_mapping,
         window_dists_spi, window_dists_jng, window_dists_wspi,
+        window_dists_dspi,
         start_day=None, end_day=None, nan_thresh=0.1, daily_nan_thresh=0.3,
         ):
     """
@@ -61,6 +62,8 @@ def calc_crn_spi(
             "precip":None,
             "eff_precip":None,
             "avg_precip":None,
+            "diff_precip":None,
+            "dspi":{w:[] for w in window_dists_spi.keys()},
             "wspi":{w:[] for w in window_dists_spi.keys()},
             "spi":{w:[] for w in window_dists_spi.keys()},
             "jng":{w:[] for w in window_dists_spi.keys()},
@@ -98,12 +101,14 @@ def calc_crn_spi(
         acc_precip = {}
         acc_wprecip = {}
         acc_eprecip = {}
+        acc_dprecip = {}
         dix0 = dates.index(start_day)
         dixf = dates.index(end_day)
         dates = np.asarray(dates[dix0:dixf+1])
         precip = np.asarray(precip)
         eprecip = effect(precip / 25.4) * 25.4
         eprecip[eprecip<0] = 0
+        dprecip = precip - eprecip
         for wsize,_ in window_dists_spi.items():
             ## weights for wspi
             warr = np.linspace(0, 1, wsize)
@@ -136,11 +141,19 @@ def calc_crn_spi(
             epsum = np.where(m_invalid, np.nan, np.nansum(epwindow,axis=1))
             acc_eprecip[wsize] = epsum
 
+            ## difference precip
+            dpwindow = sliding_window_view(dprecip[dix0-wsize+1:dixf+1], wsize)
+            m_invalid = np.count_nonzero(np.isnan(dpwindow), axis=1)
+            m_invalid = (m_invalid / dpwindow.shape[1]) > nan_thresh
+            dpsum = np.where(m_invalid, np.nan, np.nansum(dpwindow,axis=1))
+            acc_dprecip[wsize] = dpsum
+
         lg_window = zgs.attrs["labels"]["window"]
         lg_dist = zgs.attrs["labels"]["dist"]
         dist_params_spi = zgs["spi-params"][...]
         dist_params_wspi = zgs["wspi-params"][...]
         dist_params_jng = zgs["jng-params"][...]
+        dist_params_dspi = zgs["dspi-params"][...]
         precip_doy_avg = zgs["precip-avg"][...]
 
         ## for now, don't worry about zero-accumulation scaling (stagge, 2015)
@@ -155,6 +168,7 @@ def calc_crn_spi(
                 ]
         spi[sid_c]["precip"] = precip[dix0:dixf+1].tolist()
         spi[sid_c]["eff_precip"] = eprecip[dix0:dixf+1].tolist()
+        spi[sid_c]["diff_precip"] = dprecip[dix0:dixf+1].tolist()
 
         ## for each window, calculate z score wrt ghcn distributions
         doy_ixs = (dates - dates.astype("M8[Y]")).astype(int)
@@ -162,9 +176,11 @@ def calc_crn_spi(
         for wsize in window_dists_spi.keys():
             wdist_spi = window_dists_spi[wsize]
             wdist_wspi = window_dists_wspi[wsize]
+            wdist_dspi = window_dists_dspi[wsize]
             wdist_jng = window_dists_jng[wsize]
             dix_spi = lg_dist.index(wdist_spi)
             dix_wspi = lg_dist.index(wdist_wspi)
+            dix_dspi = lg_dist.index(wdist_dspi)
             dix_jng = lg_dist.index(wdist_jng)
             wix = lg_window.index(wsize)
             doy_dists_spi = [
@@ -177,7 +193,13 @@ def calc_crn_spi(
                 getattr(spstats, wdist_wspi)(*[
                     v for v in doy_params if not np.isnan(v)
                     ])
-                for doy_params in dist_params_wspi[dix_spi, wix].tolist()
+                for doy_params in dist_params_wspi[dix_wspi, wix].tolist()
+                ]
+            doy_dists_dspi = [
+                getattr(spstats, wdist_dspi)(*[
+                    v for v in doy_params if not np.isnan(v)
+                    ])
+                for doy_params in dist_params_dspi[dix_dspi, wix].tolist()
                 ]
             doy_dists_jng = [
                 getattr(spstats, wdist_jng)(*[
@@ -188,11 +210,13 @@ def calc_crn_spi(
             psum = acc_precip[wsize]
             epsum = acc_eprecip[wsize]
             wpsum = acc_wprecip[wsize]
+            dpsum = acc_dprecip[wsize]
 
             ## stand-in until probability mass shifting is implemented
             psum[psum <= 0] = 0.001
             epsum[epsum <= 0] = 0.001
             wpsum[wpsum <= 0] = 0.001
+            dpsum[dpsum <= 0] = 0.001
 
             for i,doy in enumerate(doy_ixs):
                 dist_spi = doy_dists_spi[doy]
@@ -201,15 +225,20 @@ def calc_crn_spi(
                 z_jng = spstats.norm.ppf(dist_jng.cdf(epsum[i]))
                 dist_wspi = doy_dists_wspi[doy]
                 z_wspi = spstats.norm.ppf(dist_wspi.cdf(wpsum[i]))
+                dist_dspi = doy_dists_dspi[doy]
+                z_dspi = spstats.norm.ppf(dist_dspi.cdf(dpsum[i]))
                 spi[sid_c]["spi"][wsize].append(float(z_spi))
                 spi[sid_c]["wspi"][wsize].append(float(z_wspi))
+                spi[sid_c]["dspi"][wsize].append(float(z_dspi))
                 spi[sid_c]["jng"][wsize].append(float(z_jng))
                 spi[sid_c]["acc"][wsize].append(float(psum[i]))
     return spi
 
 if __name__=="__main__":
-    zarr_store_crn = Path("data/zarr/crn_subhourly_2006-2026_OLD.zarr")
-    zarr_store_ghcn = Path("data/zarr/ghcnd_OLD.zarr")
+    #zarr_store_crn = Path("data/zarr/crn_subhourly_2006-2026_OLD.zarr")
+    #zarr_store_ghcn = Path("data/zarr/ghcnd_OLD.zarr")
+    zarr_store_crn = Path("data/zarr/crn_subhourly_2006-2026.zarr")
+    zarr_store_ghcn = Path("data/zarr/ghcnd.zarr")
     spi_json_path = Path("data/crn_spi.json")
 
     ## map crn stations to the ghcnd stations to get precip distributions from
@@ -241,6 +270,13 @@ if __name__=="__main__":
         60:"gamma",
         90:"gamma",
         }
+    window_dists_dspi = {
+        15:"fisk",
+        30:"fisk",
+        45:"fisk",
+        60:"fisk",
+        90:"fisk",
+        }
 
     ## fraction of NaN crn values to allow to calculate precip sum
     nan_thresh = 0.1
@@ -260,6 +296,7 @@ if __name__=="__main__":
         crn_ghcn_mapping=crn_ghcn_stations,
         window_dists_spi=window_dists_spi,
         window_dists_wspi=window_dists_wspi,
+        window_dists_dspi=window_dists_dspi,
         window_dists_jng=window_dists_jng,
         start_day=start_day,
         end_day=end_day,
